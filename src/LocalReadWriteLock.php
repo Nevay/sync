@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 namespace Nevay\Sync;
 
-use Amp\Cancellation;
 use InvalidArgumentException;
+use Nevay\Sync\Internal\ReentrantSemaphoreLock;
 use function sprintf;
 
 final class LocalReadWriteLock implements ReadWriteLock {
@@ -23,8 +23,8 @@ final class LocalReadWriteLock implements ReadWriteLock {
         }
 
         $semaphore = new Internal\LocalSemaphore();
-        $this->readLock = self::createLock($semaphore, 'read', $maxReaders);
-        $this->writeLock = self::createLock($semaphore, 'write', $maxWriters);
+        $this->readLock = new ReentrantSemaphoreLock($semaphore, $maxReaders, 'read');
+        $this->writeLock = new ReentrantSemaphoreLock($semaphore, $maxWriters, 'write');
     }
 
     public function readLock(): Lock {
@@ -33,30 +33,5 @@ final class LocalReadWriteLock implements ReadWriteLock {
 
     public function writeLock(): Lock {
         return $this->writeLock;
-    }
-
-    private static function createLock(Internal\Semaphore $semaphore, mixed $mode, int $maxPermits): Lock {
-        return new class($semaphore, $mode, $maxPermits) implements Lock {
-
-            public function __construct(
-                private readonly Internal\Semaphore $semaphore,
-                private readonly mixed $mode,
-                private readonly int $maxPermits,
-            ) {}
-
-            public function lock(?Cancellation $cancellation = null): void {
-                if (!$this->semaphore->acquire($this->maxPermits, mode: $this->mode)) {
-                    throw new InterruptedException();
-                }
-            }
-
-            public function tryLock(): bool {
-                return $this->semaphore->acquire($this->maxPermits, blocking: false, mode: $this->mode);
-            }
-
-            public function unlock(): void {
-                $this->semaphore->release();
-            }
-        };
     }
 }

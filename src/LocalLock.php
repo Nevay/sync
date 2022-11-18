@@ -2,12 +2,12 @@
 namespace Nevay\Sync;
 
 use InvalidArgumentException;
+use Nevay\Sync\Internal\ReentrantSemaphoreLock;
 use function sprintf;
 
 final class LocalLock implements Lock {
 
-    private readonly Internal\Semaphore $semaphore;
-    private readonly int $maxPermits;
+    private ReentrantSemaphoreLock $lock;
 
     /**
      * @param int $maxLocks number of concurrent locks, has to be positive
@@ -17,21 +17,19 @@ final class LocalLock implements Lock {
             throw new InvalidArgumentException(sprintf('Max locks (%d) has to be positive', $maxLocks));
         }
 
-        $this->semaphore = new Internal\LocalSemaphore();
-        $this->maxPermits = $maxLocks;
+        $semaphore = new Internal\LocalSemaphore();
+        $this->lock = new ReentrantSemaphoreLock($semaphore, $maxLocks, null);
     }
 
     public function lock(): void {
-        if (!$this->semaphore->acquire($this->maxPermits)) {
-            throw new InterruptedException();
-        }
+        $this->lock->lock();
     }
 
     public function tryLock(): bool {
-        return $this->semaphore->acquire($this->maxPermits, blocking: false);
+        return $this->lock->tryLock();
     }
 
     public function unlock(): void {
-        $this->semaphore->release();
+        $this->lock->unlock();
     }
 }

@@ -86,9 +86,25 @@ final class SynchronizedTest extends AsyncTestCase {
         $lock = new LocalLock();
         $lock->lock();
 
-        await([
-            async(synchronized(...), $lock, fn() => $this->fail(), [], new TimeoutCancellation(.01)),
-            async(delay(...), .01),
+        try {
+            await([
+                async(synchronized(...), $lock, fn() => $this->fail(), [], new TimeoutCancellation(.01)),
+                async(delay(...), .01),
+            ]);
+        } finally {
+            $lock->unlock();
+        }
+    }
+
+    public function testSynchronizedReentrant(): void {
+        $this->setTimeout(.01);
+
+        $lock = new LocalLock();
+        $result = await([
+            async(synchronized(...), $lock, fn() => synchronized($lock, fn() => 'a')),
+            async(synchronized(...), $lock, fn() => synchronized($lock, fn() => 'b')),
         ]);
+
+        $this->assertSame(['a', 'b'], $result);
     }
 }
