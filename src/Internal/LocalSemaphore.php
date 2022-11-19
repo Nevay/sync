@@ -5,6 +5,7 @@ use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 use Throwable;
 use function count;
+use function current;
 use function key;
 use function next;
 use function spl_object_id;
@@ -80,12 +81,12 @@ final class LocalSemaphore implements Semaphore {
     }
 
     private function processWaitList(): void {
-        while (($key = key($this->waitList)) !== null) {
-            [$maxPermits, $permits, $mode, $suspension] = current($this->waitList);
+        while ([$maxPermits, $permits, $mode, $suspension] = current($this->waitList)) {
             if (!$this->acquire($maxPermits, $permits, false, $mode, true)) {
                 break;
             }
 
+            $key = key($this->waitList);
             next($this->waitList);
             try {
                 $suspension->resume();
