@@ -40,29 +40,22 @@ final class ReentrantSemaphoreLock implements Lock {
             $reentrant->count++;
             return true;
         }
-        try {
-            if (!$this->semaphore->acquire($this->maxPermits, 1, $blocking, $this->mode)) {
-                return false;
-            }
-
+        if ($this->semaphore->acquire($this->maxPermits, 1, $blocking, $this->mode)) {
             $reentrant->count++;
             return true;
-        } finally {
-            if (!$reentrant->count) {
-                $this->reentrant->unset();
-            }
         }
+
+        return false;
     }
 
     public function unlock(): void {
         $reentrant = $this->reentrant->get();
         if (!$reentrant->count) {
-            throw new LogicException('Invalid call to Lock::unlock(), not holding lock.');
+            throw new LogicException('Invalid call to Lock::unlock(), not holding lock');
         }
 
         if (!--$reentrant->count) {
             $this->semaphore->release();
-            $this->reentrant->unset();
         }
     }
 }
