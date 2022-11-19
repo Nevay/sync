@@ -4,6 +4,7 @@ namespace Nevay\Sync;
 use Amp\PHPUnit\AsyncTestCase;
 use InvalidArgumentException;
 use LogicException;
+use Revolt\EventLoop;
 use function Amp\async;
 use function Amp\delay;
 use function Amp\Future\await;
@@ -67,6 +68,28 @@ final class LockTest extends AsyncTestCase {
         await($futures);
     }
 
+    public function testSemaphoreLockPermitsExceedsMaxPermitsThrows(): void {
+        $this->expectException(InterruptedException::class);
+
+        $lock = new LocalSemaphore(1);
+        $lock->lock(2);
+    }
+
+    public function testSemaphoreTryLockPermitsExceedsMaxPermitsReturnsFalse(): void {
+        $lock = new LocalSemaphore(1);
+
+        $this->assertFalse($lock->tryLock(2));
+    }
+
+    public function testSemaphoreCanBeReleasedFromDifferentFiber(): void {
+        $this->setMinimumRuntime(.01);
+        $this->setTimeout(.02);
+        $lock = new LocalSemaphore(1);
+        EventLoop::delay(.01, fn() => $lock->unlock());
+        $lock->lock();
+        $lock->lock();
+    }
+
     public function testLockNonPositiveMaxLocksThrows(): void {
         $this->expectException(InvalidArgumentException::class);
 
@@ -83,5 +106,32 @@ final class LockTest extends AsyncTestCase {
         $this->expectException(InvalidArgumentException::class);
 
         new LocalReadWriteLock(maxWriters: 0);
+    }
+
+    public function testSemaphoreNonPositiveMaxPermitsThrows(): void {
+        $this->expectException(InvalidArgumentException::class);
+
+        new LocalSemaphore(0);
+    }
+
+    public function testSemaphoreNonPositivePermitsLockThrows(): void {
+        $this->expectException(InvalidArgumentException::class);
+
+        $lock = new LocalSemaphore(1);
+        $lock->lock(0);
+    }
+
+    public function testSemaphoreNonPositivePermitsTryLockThrows(): void {
+        $this->expectException(InvalidArgumentException::class);
+
+        $lock = new LocalSemaphore(1);
+        $lock->tryLock(0);
+    }
+
+    public function testSemaphoreNonPositivePermitsUnlockThrows(): void {
+        $this->expectException(InvalidArgumentException::class);
+
+        $lock = new LocalSemaphore(1);
+        $lock->unlock(0);
     }
 }

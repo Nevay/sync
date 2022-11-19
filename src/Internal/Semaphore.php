@@ -50,6 +50,13 @@ interface Semaphore {
     public function availablePermits(int $maxPermits, mixed $mode = null): int;
 
     /**
+     * Returns the number of acquired permits.
+     *
+     * @return int number of acquired permits
+     */
+    public function acquiredPermits(): int;
+
+    /**
      * Returns the number of suspensions that are waiting to acquire permits.
      *
      * @return int number of waiting suspensions

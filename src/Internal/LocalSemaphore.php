@@ -71,6 +71,10 @@ final class LocalSemaphore implements Semaphore {
             : 0;
     }
 
+    public function acquiredPermits(): int {
+        return $this->permits;
+    }
+
     public function queueLength(): int {
         return count($this->waitList);
     }

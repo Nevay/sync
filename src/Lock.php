@@ -31,7 +31,7 @@ interface Lock {
     /**
      * Releases the lock.
      *
-     * The lock must be acquired before calling this method.
+     * The lock must be released from the fiber that acquired it.
      */
     public function unlock(): void;
 }
