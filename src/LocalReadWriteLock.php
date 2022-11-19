@@ -2,13 +2,12 @@
 namespace Nevay\Sync;
 
 use InvalidArgumentException;
-use Nevay\Sync\Internal\ReentrantSemaphoreLock;
 use function sprintf;
 
 final class LocalReadWriteLock implements ReadWriteLock {
 
-    private Lock $readLock;
-    private Lock $writeLock;
+    private readonly Lock $readLock;
+    private readonly Lock $writeLock;
 
     /**
      * @param int $maxReaders number of concurrent readers, has to be positive
@@ -23,8 +22,8 @@ final class LocalReadWriteLock implements ReadWriteLock {
         }
 
         $semaphore = new Internal\LocalSemaphore();
-        $this->readLock = new ReentrantSemaphoreLock($semaphore, $maxReaders, 'read');
-        $this->writeLock = new ReentrantSemaphoreLock($semaphore, $maxWriters, 'write');
+        $this->readLock = new Internal\ReentrantSemaphoreLock($semaphore, $maxReaders, 'read');
+        $this->writeLock = new Internal\ReentrantSemaphoreLock($semaphore, $maxWriters, 'write');
     }
 
     public function readLock(): Lock {

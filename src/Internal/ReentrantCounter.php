@@ -9,17 +9,37 @@ use Throwable;
  */
 final class ReentrantCounter {
 
-    public int $count = 0;
-
     private readonly Semaphore $semaphore;
-    private ?Throwable $created;
+    private int $count = 0;
+    private ?Throwable $acquired = null;
 
     public function __construct(Semaphore $semaphore) {
         $this->semaphore = $semaphore;
+    }
 
-        /** @noinspection PhpFieldImmediatelyRewrittenInspection */
-        $this->created = null;
-        assert($this->created = new LogicException('Call to Lock::lock() without call to Lock::unlock()'));
+    public function acquire(int $maxPermits, bool $blocking, mixed $mode): bool {
+        if ($this->count) {
+            $this->count++;
+            return true;
+        }
+        if ($this->semaphore->acquire($maxPermits, 1, $blocking, $mode)) {
+            assert($this->acquired = new LogicException('Call to Lock::lock() without call to Lock::unlock()'));
+            assert($this->count === 0);
+            $this->count++;
+            return true;
+        }
+
+        return false;
+    }
+
+    public function release(): void {
+        if (!$this->count) {
+            throw new LogicException('Invalid call to Lock::unlock(), not holding lock');
+        }
+
+        if (!--$this->count) {
+            $this->semaphore->release();
+        }
     }
 
     public function __destruct() {
@@ -28,6 +48,6 @@ final class ReentrantCounter {
         }
 
         $this->semaphore->release();
-        throw new LogicException('Missing call to Lock::unlock()', 0, $this->created);
+        throw new LogicException('Missing call to Lock::unlock()', 0, $this->acquired);
     }
 }
