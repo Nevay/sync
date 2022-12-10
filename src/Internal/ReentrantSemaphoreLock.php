@@ -10,12 +10,14 @@ use Revolt\EventLoop\FiberLocal;
  */
 final class ReentrantSemaphoreLock implements Lock {
 
+    private readonly Semaphore $semaphore;
     private readonly int $maxPermits;
     private readonly mixed $mode;
     /** @var FiberLocal<ReentrantCounter> */
     private readonly FiberLocal $reentrant;
 
     public function __construct(Semaphore $semaphore, int $maxPermits, mixed $mode) {
+        $this->semaphore = $semaphore;
         $this->maxPermits = $maxPermits;
         $this->mode = $mode;
         $this->reentrant = new FiberLocal(static fn() => new ReentrantCounter($semaphore));
@@ -33,5 +35,17 @@ final class ReentrantSemaphoreLock implements Lock {
 
     public function unlock(): void {
         $this->reentrant->get()->release();
+    }
+
+    public function __serialize(): array {
+        return [
+            $this->semaphore,
+            $this->maxPermits,
+            $this->mode,
+        ];
+    }
+
+    public function __unserialize(array $data): void {
+        $this->__construct(...$data);
     }
 }

@@ -20,12 +20,8 @@ final class LocalSemaphore implements Semaphore {
     /** @var array<int, array{int, int, mixed, Suspension}> */
     private array $waitList = [];
 
-    private function __clone(): never {
-        assert(false);
-    }
-
     public function acquire(int $maxPermits, int $permits = 1, bool $blocking = true, mixed $mode = null, bool $ignoreWaitList = false): bool {
-        assert($permits > 0);
+        assert($permits >= 0);
         assert($maxPermits >= $permits);
 
         if ($this->availablePermits($maxPermits, $mode, $ignoreWaitList) >= $permits) {
@@ -47,7 +43,7 @@ final class LocalSemaphore implements Semaphore {
         // check if cancelled/resumed externally
         if (isset($this->waitList[spl_object_id($suspension)])) {
             unset($this->waitList[spl_object_id($suspension)]);
-            $this->processWaitList();
+            $this->release(0);
 
             return isset($e)
                 ? throw $e
@@ -59,11 +55,24 @@ final class LocalSemaphore implements Semaphore {
     }
 
     public function release(int $permits = 1): void {
-        assert($permits > 0);
+        assert($permits >= 0);
         assert($this->permits >= $permits);
 
         $this->permits -= $permits;
-        $this->processWaitList();
+        while ([$maxPermits, $permits, $mode, $suspension] = current($this->waitList)) {
+            if (!$this->acquire($maxPermits, $permits, false, $mode, true)) {
+                break;
+            }
+
+            $key = key($this->waitList);
+            try {
+                $suspension->resume();
+                unset($this->waitList[$key]);
+            } catch (Throwable) {
+                next($this->waitList);
+                $this->permits -= $permits;
+            }
+        }
     }
 
     public function availablePermits(int $maxPermits, mixed $mode = null, bool $ignoreWaitList = false): int {
@@ -80,20 +89,11 @@ final class LocalSemaphore implements Semaphore {
         return count($this->waitList);
     }
 
-    private function processWaitList(): void {
-        while ([$maxPermits, $permits, $mode, $suspension] = current($this->waitList)) {
-            if (!$this->acquire($maxPermits, $permits, false, $mode, true)) {
-                break;
-            }
+    public function __serialize(): array {
+        return [];
+    }
 
-            $key = key($this->waitList);
-            next($this->waitList);
-            try {
-                $suspension->resume();
-                unset($this->waitList[$key]);
-            } catch (Throwable) {
-                $this->permits -= $permits;
-            }
-        }
+    private function __clone(): never {
+        assert(false);
     }
 }

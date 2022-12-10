@@ -1,6 +1,9 @@
 <?php declare(strict_types=1);
-namespace Nevay\Sync;
+namespace Nevay\Sync\Amp;
 
+use Amp\Sync\LocalMutex;
+use Amp\Sync\LocalSemaphore;
+use Amp\Sync\Semaphore;
 use Fiber;
 use PhpBench\Attributes\BeforeMethods;
 use PhpBench\Attributes\Iterations;
@@ -14,19 +17,15 @@ use Revolt\EventLoop\Suspension;
 #[Iterations(10)]
 #[BeforeMethods('setup')]
 #[ParamProviders('locks')]
-final class LockBench {
+final class LockAmpBench {
 
-    private Lock $lock;
+    private Semaphore $lock;
     /** @var list<Fiber> */
     private array $fibers = [];
     private ?Suspension $suspension = null;
 
-    public function setup(array $parameters): void {
-        $this->lock = $parameters['lock'];
-    }
-
     public function locks(): iterable {
-        yield 'local lock' => ['lock' => new LocalLock()];
+        yield 'local mutex' => ['lock' => new LocalMutex()];
         yield 'local semaphore' => ['lock' => new LocalSemaphore(1)];
     }
 
@@ -37,6 +36,10 @@ final class LockBench {
         yield '1000' => ['blocking' => 1000];
     }
 
+    public function setup(array $parameters): void {
+        $this->lock = $parameters['lock'];
+    }
+
     public function setupFiber(array $parameters): void {
         $pending = 0;
         for ($n = $parameters['blocking'] ?? 0; --$n >= 0;) {
@@ -44,8 +47,7 @@ final class LockBench {
                 for (;;) {
                     Fiber::suspend();
                     $pending++;
-                    $this->lock->lock();
-                    $this->lock->unlock();
+                    $this->lock->acquire()->release();
                     if (!--$pending) {
                         $this->suspension?->resume();
                     }
@@ -57,8 +59,7 @@ final class LockBench {
 
     #[Revs(100)]
     public function benchLockUnlock(): void {
-        $this->lock->lock();
-        $this->lock->unlock();
+        $this->lock->acquire()->release();
     }
 
     #[BeforeMethods('setupFiber')]
@@ -66,11 +67,11 @@ final class LockBench {
     #[Revs(10)]
     public function benchBlockingLockUnlock(): void {
         $this->suspension = EventLoop::getSuspension();
-        $this->lock->lock();
+        $lock = $this->lock->acquire();
         foreach ($this->fibers as $fiber) {
             $fiber->resume();
         }
-        $this->lock->unlock();
+        $lock->release();
         $this->suspension->suspend();
     }
 }
