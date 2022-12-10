@@ -6,6 +6,7 @@ use Amp\CancelledException;
 use Closure;
 use Revolt\EventLoop;
 use Throwable;
+use function assert;
 
 /**
  * Invokes the closure while holding the given lock.
@@ -31,9 +32,37 @@ function synchronized(Lock $lock, Closure $closure, iterable $args = [], ?Cancel
     $_cancellation = $cancellation;
     unset($lock, $closure, $args, $cancellation);
 
+    lockWithCancellation($_lock, $_cancellation);
+    unset($_cancellation);
+
+    try {
+        /** @noinspection PhpUnusedLocalVariableInspection */
+        return $_closure(...$_args, ...($_args = []));
+    } finally {
+        $_lock->unlock();
+    }
+}
+
+/**
+ * Acquires the lock.
+ *
+ * @param Lock $lock lock to acquire
+ * @param Cancellation|null $cancellation cancellation for lock acquisition
+ * @throws CancelledException if awaiting the lock is interrupted by the given
+ *         cancellation
+ * @throws InterruptedException if awaiting the lock is interrupted using
+ *         {@link Suspension::resume()}
+ * @throws Throwable if awaiting the lock is interrupted using
+ *         {@link Suspension::throw()}
+ */
+function lockWithCancellation(Lock $lock, ?Cancellation $cancellation): void {
+    $_lock = $lock;
+    $_cancellation = $cancellation;
+    unset($lock, $cancellation);
+
     if (!$_cancellation) {
         $_lock->lock();
-    } elseif (!$_lock->tryLock()) {
+    } elseif (!$_cancellation->isRequested()) {
         $suspension = EventLoop::getSuspension();
         $cancellationId = $_cancellation->subscribe(static function(CancelledException $e) use ($suspension): void {
             try {
@@ -52,13 +81,8 @@ function synchronized(Lock $lock, Closure $closure, iterable $args = [], ?Cancel
             $_lock->unlock();
             throw $e;
         }
-    }
-    unset($_cancellation);
-
-    try {
-        /** @noinspection PhpUnusedLocalVariableInspection */
-        return $_closure(...$_args, ...($_args = []));
-    } finally {
-        $_lock->unlock();
+    } elseif (!$_lock->tryLock()) {
+        $_cancellation->throwIfRequested();
+        assert(false);
     }
 }
