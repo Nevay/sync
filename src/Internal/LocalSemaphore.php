@@ -20,11 +20,11 @@ final class LocalSemaphore implements Semaphore {
     /** @var array<int, array{int, int, mixed, Suspension}> */
     private array $waitList = [];
 
-    public function acquire(int $maxPermits, int $permits = 1, bool $blocking = true, mixed $mode = null, bool $ignoreWaitList = false): bool {
+    public function acquire(int $maxPermits, int $permits = 1, bool $blocking = true, mixed $mode = null): bool {
         assert($permits >= 0);
         assert($maxPermits >= $permits);
 
-        if ($this->availablePermits($maxPermits, $mode, $ignoreWaitList) >= $permits) {
+        if ($this->availablePermits($maxPermits, $mode) >= $permits && key($this->waitList) === null) {
             $this->mode = $mode;
             $this->permits += $permits;
             return true;
@@ -60,23 +60,24 @@ final class LocalSemaphore implements Semaphore {
 
         $this->permits -= $permits;
         while ([$maxPermits, $permits, $mode, $suspension] = current($this->waitList)) {
-            if (!$this->acquire($maxPermits, $permits, false, $mode, true)) {
+            if ($this->availablePermits($maxPermits, $mode) < $permits) {
                 break;
             }
 
             $key = key($this->waitList);
             try {
                 $suspension->resume();
+                $this->mode = $mode;
+                $this->permits += $permits;
                 unset($this->waitList[$key]);
             } catch (Throwable) {
                 next($this->waitList);
-                $this->permits -= $permits;
             }
         }
     }
 
-    public function availablePermits(int $maxPermits, mixed $mode = null, bool $ignoreWaitList = false): int {
-        return !$this->permits || $this->mode === $mode && $this->permits < $maxPermits && ($ignoreWaitList || key($this->waitList) === null)
+    public function availablePermits(int $maxPermits, mixed $mode = null): int {
+        return !$this->permits || $this->mode === $mode && $this->permits < $maxPermits
             ? $maxPermits - $this->permits
             : 0;
     }
